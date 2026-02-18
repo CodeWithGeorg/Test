@@ -1,54 +1,85 @@
 import { useEffect, useState } from "react";
-import { databases, account } from "../appwrite";
-// import {OrderCard} from "../components/OrderCard";
-import { useNavigate } from "react-router-dom";
+import { databases, account, ID } from "../appwrite";
+import TaskCard  from "../components/TaskCard";
 
 export default function ClientDashboard() {
-  const navigate = useNavigate();
-  const [orders, setOrders] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [title, setTitle] = useState("");
+
+  const userId = account.get().$id; // current user
 
   useEffect(() => {
-    loadOrders();
+    fetchTasks();
   }, []);
 
-  const loadOrders = async () => {
+  const fetchTasks = async () => {
     try {
-      const response = await databases.listDocuments(
-        import.meta.env.VITE_APPWRITE_DB_ID,
-        import.meta.env.VITE_APPWRITE_ORDERS_COLLECTION
+      const res = await databases.listDocuments(
+        DATABASE_ID,
+        TASKS_COLLECTION_ID,
+        [
+          { attribute: "userId", operator: "equal", value: userId }
+        ]
       );
-      setOrders(response.documents);
+      setTasks(res.documents);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const logout = async () => {
-    await account.deleteSession("current");
-    navigate("/login");
+  const addTask = async (e) => {
+    e.preventDefault();
+    try {
+      await databases.createDocument(
+        DATABASE_ID,
+        TASKS_COLLECTION_ID,
+        ID.unique(),
+        { title, completed: false, userId }
+      );
+      setTitle("");
+      fetchTasks();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const toggleTask = async (id, completed) => {
+    await databases.updateDocument(DATABASE_ID, TASKS_COLLECTION_ID, id, { completed });
+    fetchTasks();
+  };
+
+  const deleteTask = async (id) => {
+    await databases.deleteDocument(DATABASE_ID, TASKS_COLLECTION_ID, id);
+    fetchTasks();
   };
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-4xl font-bold text-gray-800">My Dashboard</h1>
-        <button
-          onClick={logout}
-          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
-        >
-          Logout
-        </button>
-      </div>
+      <h1 className="text-3xl font-bold mb-4">My Tasks</h1>
 
-      {orders.length === 0 ? (
-        <p className="text-gray-600">No orders yet...</p>
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {orders.map((order) => (
-            <OrderCard key={order.$id} order={order} />
-          ))}
-        </div>
-      )}
+      <form onSubmit={addTask} className="flex gap-2 mb-6">
+        <input
+          type="text"
+          placeholder="New task title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="flex-1 p-3 rounded-lg border"
+        />
+        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">
+          Add
+        </button>
+      </form>
+
+      <div className="grid gap-4">
+        {tasks.map((task) => (
+          <TaskCard
+            key={task.$id}
+            task={task}
+            onToggle={toggleTask}
+            onDelete={deleteTask}
+          />
+        ))}
+      </div>
     </div>
   );
 }
