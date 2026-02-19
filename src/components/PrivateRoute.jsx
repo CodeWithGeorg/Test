@@ -1,51 +1,28 @@
 // src/components/PrivateRoute.jsx
-import React, { useEffect, useState } from "react";
-import { account, databases, DATABASE_ID, USERS_COLLECTION_ID } from "../appwrite";
+import React from "react";
 import { Navigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import Spinner from "./Spinner";
+import { ROUTES } from "../routes/constants";
 
 export default function PrivateRoute({ children, adminOnly = false }) {
-  const [loading, setLoading] = useState(true);
-  const [allowed, setAllowed] = useState(false);
+  const { user, loading, isAdmin } = useAuth();
 
-  useEffect(() => {
-    let mounted = true;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <Spinner size="large" />
+      </div>
+    );
+  }
 
-    async function checkAuth() {
-      try {
-        const user = await account.get(); // throws if not logged in
-        if(!user) {
-          if(mounted) { setAllowed(false); setLoading(false); }
-          return;
-        }
-        // Now fetch user doc from Appwrite databases collection
-        // We assume we store the appwrite userId as "uid" or use $id
-        const list = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION_ID, [
-          // We will query by userId (field name 'userId') OR read by id if we saved the docId equal to user.$id
-        ]);
+  if (!user) {
+    return <Navigate to={ROUTES.LOGIN} replace />;
+  }
 
-        // attempt to find a document that matches user.$id or email
-        const udoc = list.documents.find(d => d.userId === user.$id || d.email === user.email);
-        const role = udoc?.role || "client";
+  if (adminOnly && !isAdmin()) {
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
+  }
 
-        if (adminOnly) {
-          if (role === "admin") setAllowed(true);
-          else setAllowed(false);
-        } else {
-          setAllowed(true);
-        }
-      } catch (e) {
-        setAllowed(false);
-      } finally {
-        if(mounted) setLoading(false);
-      }
-    }
-
-    checkAuth();
-
-    return () => { mounted = false; };
-  }, [adminOnly]);
-
-  if (loading) return <div>Loading...</div>;
-  if (!allowed) return <Navigate to="/login" replace />;
   return children;
 }
